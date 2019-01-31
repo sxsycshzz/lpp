@@ -1,0 +1,15 @@
+[Unit]
+Description=PPP over ethernet
+After=network-online.target systemd-networkd.service
+Wants=network-online.target systemd-networkd.service
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/pppoe-start
+ExecReload=/usr/sbin/pppoe-stop;/usr/sbin/pppoe-start
+ExecStop=-/usr/sbin/pppoe-stop
+ExecStopPost=-ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

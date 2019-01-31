@@ -1,0 +1,5 @@
+*.o
+*.swp
+*.bak
+
+systemd_net_switch

@@ -1,0 +1,37 @@
+#!/bin/sh
+
+wan_way=$(cat /etc/certusnet_conf/wan_way)
+case $wan_way in
+	"dhcp" | "static" )
+		ifconfig wlp1s0 down
+		ls -al /etc/resolv.conf | grep systmed >/dev/null || ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+		echo "dhcp or static"
+		;;
+	"wifi")
+		ifconfig eth0 down
+		ls -al /etc/resolv.conf | grep systmed >/dev/null || ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+		echo "wifi"
+		;;
+	"pppoe")
+		ifconfig wlp1s0 down
+		systemctl restart pppoe
+		echo "pppoe"
+		ifconfig eth0 0.0.0.0 
+		num=0
+		while [ $num -lt 10 ]
+		do
+			num=$(($num+1))
+			pppoe-status | grep -w inet >/dev/null && {
+				echo "pppoe success after $num *10s"
+				num=100
+			}
+		done 
+		sleep 10 
+		route del default ; route add default dev ppp0 
+		;;
+	*)
+		echo "not dhcp, static, pppoe or wifi"
+		;;
+esac
+
+exit 0
