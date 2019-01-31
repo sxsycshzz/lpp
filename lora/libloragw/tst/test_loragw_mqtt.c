@@ -30,6 +30,7 @@ Maintainer: Sylvain Miermont
 #include <string.h>        /* memset */
 #include <signal.h>        /* sigaction */
 #include <unistd.h>        /* getopt access */
+#include <stdlib.h>
 
 #include "loragw_hal.h"
 #include "loragw_reg.h"
@@ -46,6 +47,66 @@ Maintainer: Sylvain Miermont
 #define DEFAULT_RSSI_OFFSET 0.0
 #define DEFAULT_NOTCH_FREQ  129000U
 
+// MQTT
+#define CMD_SIZE	256
+#define MQTT_IP		"127.0.0.1"
+#define MQTT_PORT	"1883" 
+#define MQTT_TOPIC	"mo_datatransfer_topic"
+#define LORA_DATA "\'{\"device\":\"lorasensor\",\"devid\":\"%s\",\"readings\":[\{\"name\":\"Temperature\",\"value\":\"%.1f\"\},\{\"name\":\"Humidity\",\"value\":\"%.1f\"\}]}\'"
+#define MQTT_SEND_CMD	"mosquitto_pub -h %s -p %s -t %s -m " LORA_DATA
+#define LORA_DATA_LEN	18
+
+// MQTT function
+static unsigned short get_crc16(unsigned short indata, unsigned short outdata){
+	outdata = (outdata >> 8) | (outdata << 8);
+	outdata ^= indata;
+	outdata ^= (outdata & 0xFF) >> 4;
+	outdata ^= outdata << 12;
+	outdata ^= (outdata & 0xFF) << 5;
+	return outdata;
+}
+
+static unsigned short cal_crc16(const unsigned char *pdata, unsigned int len){
+	unsigned int i = 0;
+	unsigned short crc16 = 0xFFFF;
+
+	for(i = 0; i < len; i++){
+		crc16 = get_crc16(*(pdata++), crc16);	
+	}
+
+	return crc16;
+}
+
+static char lora_devid[16]={0};
+static float lora_temp = 0.0;
+static float lora_humi = 0.0;
+static char cmd[CMD_SIZE]={0};
+
+static int get_lora_temp_humi(const unsigned char *pdata, unsigned int len, char *devid, float *temp, float *humi){
+	unsigned short crc16, crc_cal;
+
+	if((NULL == pdata)|| (len != LORA_DATA_LEN)){
+		return -1;
+	}
+
+	if(strncmp("start", pdata, 5) || (0xB != pdata[6]) || (0x4 != pdata[11]) || (0x5 != pdata[14])){
+		return -2;
+	}
+#if 0
+	crc16 = (pdata[len-2]<<8) + pdata[len-1];
+	crc_cal = cal_crc16(pdata, len-2);
+	if(crc16 != crc_cal){
+		return -2;
+	}
+#endif
+
+	sprintf(devid, "%X%X%X%X", pdata[7], pdata[8], pdata[9], pdata[10]);
+	*temp = ((pdata[12]<<8) + pdata[13])*0.1; 	
+	*humi = pdata[15];
+
+	return 0;
+}
+
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE VARIABLES ---------------------------------------------------- */
 
@@ -59,7 +120,6 @@ static void sig_handler(int sigio);
 
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE FUNCTIONS DEFINITION ----------------------------------------- */
-
 static void sig_handler(int sigio) {
     if (sigio == SIGQUIT) {
         quit_sig = 1;;
@@ -75,11 +135,12 @@ void usage(void) {
     printf( " -h print this help\n");
     printf( " -n only print Tx\n");
     printf( " -s use private LoRaWAN\n");
-    printf( " -a <float> Radio A RX frequency in MHz\n");
-    printf( " -b <float> Radio B RX frequency in MHz\n");
-    printf( " -t <float> Radio TX frequency in MHz\n");
-    printf( " -r <int> Radio type (SX1255:1255, SX1257:1257)\n");
-    printf( " -k <int> Concentrator clock source (0: radio_A, 1: radio_B(default))\n");
+    printf( " -f <float> First RX frequency in MHz, range:470.3~487.9, step: 1.6\n");
+//    printf( " -a <float> Radio A RX frequency in MHz\n");
+//    printf( " -b <float> Radio B RX frequency in MHz\n");
+    printf( " -t <float> Radio TX frequency in MHz, range:500.3~509.7, step: 0.2\n");
+//    printf( " -r <int> Radio type (SX1255:1255, SX1257:1257)\n");
+//    printf( " -k <int> Concentrator clock source (0: radio_A, 1: radio_B(default))\n");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -99,8 +160,8 @@ int main(int argc, char **argv)
 
     int i, j;
     int nb_pkt = 0;
-    uint32_t fa = 0, fb = 0, ft = 0;
-    enum lgw_radio_type_e radio_type = LGW_RADIO_TYPE_NONE;
+    uint32_t fa = 0, fb = 0, ft = 0, fstart = 0;
+    enum lgw_radio_type_e radio_type = LGW_RADIO_TYPE_SX1255;
     uint8_t clocksource = 1; /* Radio B is source by default */
 
     uint32_t tx_cnt = 0;
@@ -110,20 +171,26 @@ int main(int argc, char **argv)
     int xi = 0;
     int rx_disable = 0;
     int sync_private = 0;
+	int ret = 0;
 
     /* parse command line options */
-    while ((i = getopt (argc, argv, "hnsa:b:t:r:k:")) != -1) {
+    while ((i = getopt (argc, argv, "hnsf:t:")) != -1) {
         switch (i) {
             case 'h':
                 usage();
                 return -1;
                 break;
-	    case 'n':
-		rx_disable = 1;
+			case 'n':
+				rx_disable = 1;
+				break;
+			case 's':
+				sync_private = 1;
+				break;
+		   case 'f': /* <float> RX frequency in MHz */
+                sscanf(optarg, "%lf", &xd);
+                fstart = (uint32_t)((xd*1e6) + 0.5); /* .5 Hz offset to get rounding instead of truncating */
                 break;
-	    case 's':
-		sync_private = 1;
-                break;
+#if 0
             case 'a': /* <float> Radio A RX frequency in MHz */
                 sscanf(optarg, "%lf", &xd);
                 fa = (uint32_t)((xd*1e6) + 0.5); /* .5 Hz offset to get rounding instead of truncating */
@@ -132,10 +199,12 @@ int main(int argc, char **argv)
                 sscanf(optarg, "%lf", &xd);
                 fb = (uint32_t)((xd*1e6) + 0.5); /* .5 Hz offset to get rounding instead of truncating */
                 break;
+#endif
             case 't': /* <float> Radio TX frequency in MHz */
                 sscanf(optarg, "%lf", &xd);
                 ft = (uint32_t)((xd*1e6) + 0.5); /* .5 Hz offset to get rounding instead of truncating */
                 break;
+#if 0 
             case 'r': /* <int> Radio type (1255, 1257) */
                 sscanf(optarg, "%i", &xi);
                 switch (xi) {
@@ -151,6 +220,7 @@ int main(int argc, char **argv)
                         return -1;
                 }
                 break;
+#endif
             case 'k': /* <int> Concentrator clock source (Radio A or Radio B) */
                 sscanf(optarg, "%i", &xi);
                 clocksource = (uint8_t)xi;
@@ -164,14 +234,17 @@ int main(int argc, char **argv)
 
     /* check input parameters */
 //    if ((fa == 0) || (fb == 0) || (ft == 0)) {
-    if ((fa == 0) && (fb == 0) ) {
+//    if ((fa == 0) && (fb == 0) ) {
+	if (fstart == 0) {
         printf("ERROR: missing frequency input parameter:\n");
-        printf("  Radio A RX: %u\n", fa);
-        printf("  Radio B RX: %u\n", fb);
+//        printf("  Radio A RX: %u\n", fa);
+//        printf("  Radio B RX: %u\n", fb);
 //        printf("  Radio TX: %u\n", ft);
         usage();
         return -1;
     }
+	fa = fstart + 1000000;
+	fb = fstart + 400000;
 
     if (radio_type == LGW_RADIO_TYPE_NONE) {
         printf("ERROR: missing radio type parameter:\n");
@@ -335,90 +408,101 @@ int main(int argc, char **argv)
     while ((quit_sig != 1) && (exit_sig != 1)) {
         loop_cnt++;
 	
-	if( 0 == rx_disable){
-		/* fetch N packets */
-		nb_pkt = lgw_receive(ARRAY_SIZE(rxpkt), rxpkt);	
-	}
-
-        if (nb_pkt == 0) {
-            wait_ms(300);
-        } else {
-            /* display received packets */
-            for(i=0; i < nb_pkt; ++i) {
-                p = &rxpkt[i];
-                printf("---\nRcv pkt #%d >>", i+1);
-                if (p->status == STAT_CRC_OK) {
-                    printf(" if_chain:%2d", p->if_chain);
-                    printf(" tstamp:%010u", p->count_us);
-                    printf(" size:%3u", p->size);
-                    switch (p-> modulation) {
-                        case MOD_LORA: printf(" LoRa"); break;
-                        case MOD_FSK: printf(" FSK"); break;
-                        default: printf(" modulation?");
-                    }
-                    switch (p->datarate) {
-                        case DR_LORA_SF7: printf(" SF7"); break;
-                        case DR_LORA_SF8: printf(" SF8"); break;
-                        case DR_LORA_SF9: printf(" SF9"); break;
-                        case DR_LORA_SF10: printf(" SF10"); break;
-                        case DR_LORA_SF11: printf(" SF11"); break;
-                        case DR_LORA_SF12: printf(" SF12"); break;
-                        default: printf(" datarate?");
-                    }
-                    switch (p->coderate) {
-                        case CR_LORA_4_5: printf(" CR1(4/5)"); break;
-                        case CR_LORA_4_6: printf(" CR2(2/3)"); break;
-                        case CR_LORA_4_7: printf(" CR3(4/7)"); break;
-                        case CR_LORA_4_8: printf(" CR4(1/2)"); break;
-                        default: printf(" coderate?");
-                    }
-                    printf("\n");
-                    printf(" RSSI:%+6.1f SNR:%+5.1f (min:%+5.1f, max:%+5.1f) payload:\n", p->rssi, p->snr, p->snr_min, p->snr_max);
-
-                    for (j = 0; j < p->size; ++j) {
-                        printf(" %02X", p->payload[j]);
-                    }
-                    printf(" #\n");
-                } else if (p->status == STAT_CRC_BAD) {
-                    printf(" if_chain:%2d", p->if_chain);
-                    printf(" tstamp:%010u", p->count_us);
-                    printf(" size:%3u\n", p->size);
-                    printf(" CRC error, damaged packet\n\n");
-                } else if (p->status == STAT_NO_CRC){
-                    printf(" if_chain:%2d", p->if_chain);
-                    printf(" tstamp:%010u", p->count_us);
-                    printf(" size:%3u\n", p->size);
-                    printf(" no CRC\n\n");
-                } else {
-                    printf(" if_chain:%2d", p->if_chain);
-                    printf(" tstamp:%010u", p->count_us);
-                    printf(" size:%3u\n", p->size);
-                    printf(" invalid status ?!?\n\n");
-                }
-            }
-        }
-
-        /* send a packet every X loop */
-	if(ft != 0){
-		if (loop_cnt%16 == 0) {
-		    /* 32b counter in the payload, big endian */
-		    txpkt.payload[16] = 0xff & (tx_cnt >> 24);
-		    txpkt.payload[17] = 0xff & (tx_cnt >> 16);
-		    txpkt.payload[18] = 0xff & (tx_cnt >> 8);
-		    txpkt.payload[19] = 0xff & tx_cnt;
-		    i = lgw_send(txpkt); /* non-blocking scheduling of TX packet */
-		    j = 0;
-		    printf("+++\nSending packet #%d, rf path %d, return %d\nstatus -> ", tx_cnt, txpkt.rf_chain, i);
-		    do {
-			++j;
-			wait_ms(100);
-			lgw_status(TX_STATUS, &status_var); /* get TX status */
-			printf("%d:", status_var);
-		    } while ((status_var != TX_FREE) && (j < 100));
-		    ++tx_cnt;
-		    printf("\nTX finished\n");
+		if( 0 == rx_disable){
+			/* fetch N packets */
+			nb_pkt = lgw_receive(ARRAY_SIZE(rxpkt), rxpkt);	
 		}
-	}
+
+		if (nb_pkt == 0) {
+			wait_ms(300);
+		} else {
+			/* display received packets */
+			for(i=0; i < nb_pkt; ++i) {
+				p = &rxpkt[i];
+				printf("---\nRcv pkt #%d >>", i+1);
+				if (p->status == STAT_CRC_OK) {
+					printf(" if_chain:%2d", p->if_chain);
+					printf(" tstamp:%010u", p->count_us);
+					printf(" size:%3u", p->size);
+					switch (p-> modulation) {
+						case MOD_LORA: printf(" LoRa"); break;
+						case MOD_FSK: printf(" FSK"); break;
+						default: printf(" modulation?");
+					}
+					switch (p->datarate) {
+						case DR_LORA_SF7: printf(" SF7"); break;
+						case DR_LORA_SF8: printf(" SF8"); break;
+						case DR_LORA_SF9: printf(" SF9"); break;
+						case DR_LORA_SF10: printf(" SF10"); break;
+						case DR_LORA_SF11: printf(" SF11"); break;
+						case DR_LORA_SF12: printf(" SF12"); break;
+						default: printf(" datarate?");
+					}
+					switch (p->coderate) {
+						case CR_LORA_4_5: printf(" CR1(4/5)"); break;
+						case CR_LORA_4_6: printf(" CR2(2/3)"); break;
+						case CR_LORA_4_7: printf(" CR3(4/7)"); break;
+						case CR_LORA_4_8: printf(" CR4(1/2)"); break;
+						default: printf(" coderate?");
+					}
+					printf("\n");
+					printf(" RSSI:%+6.1f SNR:%+5.1f (min:%+5.1f, max:%+5.1f) payload:\n", p->rssi, p->snr, p->snr_min, p->snr_max);
+
+					for (j = 0; j < p->size; ++j) {
+						printf(" %02X", p->payload[j]);
+					}
+					printf(" #\n");
+					
+					// check lora temperature and humidity sensor data
+					if(0 == get_lora_temp_humi(p->payload, p->size, lora_devid, &lora_temp, &lora_humi)){
+						// mqtt send
+						sprintf(cmd, MQTT_SEND_CMD, MQTT_IP, MQTT_PORT, MQTT_TOPIC, lora_devid, lora_temp, lora_humi);
+						printf("%s\n", cmd);
+						ret = system(cmd);
+						if(ret != 0){
+							system(cmd);
+						}
+					}
+				} else if (p->status == STAT_CRC_BAD) {
+					printf(" if_chain:%2d", p->if_chain);
+					printf(" tstamp:%010u", p->count_us);
+					printf(" size:%3u\n", p->size);
+					printf(" CRC error, damaged packet\n\n");
+				} else if (p->status == STAT_NO_CRC){
+					printf(" if_chain:%2d", p->if_chain);
+					printf(" tstamp:%010u", p->count_us);
+					printf(" size:%3u\n", p->size);
+					printf(" no CRC\n\n");
+				} else {
+					printf(" if_chain:%2d", p->if_chain);
+					printf(" tstamp:%010u", p->count_us);
+					printf(" size:%3u\n", p->size);
+					printf(" invalid status ?!?\n\n");
+				}
+			}
+		}
+
+			/* send a packet every X loop */
+		if(ft != 0){
+			if (loop_cnt%16 == 0) {
+				/* 32b counter in the payload, big endian */
+				txpkt.payload[16] = 0xff & (tx_cnt >> 24);
+				txpkt.payload[17] = 0xff & (tx_cnt >> 16);
+				txpkt.payload[18] = 0xff & (tx_cnt >> 8);
+				txpkt.payload[19] = 0xff & tx_cnt;
+				i = lgw_send(txpkt); /* non-blocking scheduling of TX packet */
+				j = 0;
+				printf("+++\nSending packet #%d, rf path %d, return %d\nstatus -> ", tx_cnt, txpkt.rf_chain, i);
+				do {
+				++j;
+				wait_ms(100);
+				lgw_status(TX_STATUS, &status_var); /* get TX status */
+				printf("%d:", status_var);
+				} while ((status_var != TX_FREE) && (j < 100));
+				++tx_cnt;
+				printf("\nTX finished\n");
+			}
+		}
     }
 
     if (exit_sig == 1) {

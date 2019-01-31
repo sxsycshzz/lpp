@@ -1,0 +1,4 @@
+inc/config.h
+libloragw.a
+obj
+test_loragw_*
