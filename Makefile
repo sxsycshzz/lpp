@@ -4,6 +4,8 @@ ARCH ?=
 CROSS_COMPILE ?=
 export
 
+CP=cp -a
+
 ### general build targets
 
 all:
@@ -17,6 +19,8 @@ pre_install:
 	$(MAKE) pre_install -e -C lora 
 	$(MAKE) pre_install -e -C systemd_net
 
+install: pre_install
+	$(CP) deployment/* /
 
 clean:
 	$(MAKE)	clean -e -C zigbee
