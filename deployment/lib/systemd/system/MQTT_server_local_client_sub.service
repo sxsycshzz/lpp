@@ -1,0 +1,16 @@
+[Unit]
+Description=mqtt local client sub
+After=mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/MQTT_server_local_client_sub
+ExecReload=/usr/local/bin/MQTT_server_local_client_sub
+RestartSec=10
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+Alias=mosquitto_local_sub
+
