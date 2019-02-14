@@ -4,12 +4,12 @@ wan_way=$(cat /etc/certusnet_conf/wan_way)
 case $wan_way in
 	"dhcp" | "static" )
 		ifconfig wlp1s0 down
-		ls -al /etc/resolv.conf | grep systmed >/dev/null || ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+		ls -al /etc/resolv.conf | grep systemd >/dev/null || ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
 		echo "dhcp or static"
 		;;
 	"wifi")
 		ifconfig eth0 down
-		ls -al /etc/resolv.conf | grep systmed >/dev/null || ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+		ls -al /etc/resolv.conf | grep systemd >/dev/null || ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
 		echo "wifi"
 		;;
 	"pppoe")
