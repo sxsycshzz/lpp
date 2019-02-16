@@ -1,0 +1,15 @@
+[Unit]
+Description=Lora data collection
+After=systemd-udevd.service
+Wants=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/test_loragw_mqtt -s -f 475.1
+ExecReload=/usr/local/bin/test_loragw_mqtt -s -f 475.1
+RestartSec=60
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target 
+

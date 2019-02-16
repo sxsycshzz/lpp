@@ -1,0 +1,7 @@
+# zigbee usb
+SUBSYSTEM=="tty", ACTION=="add", ENV{ID_VENDOR_ID}=="067b", ENV{ID_MODEL_ID}=="2303", MODE="0664", GROUP="plugdev", SYMLINK+="zigbee", RUN+="/bin/systemctl restart zigbee"
+SUBSYSTEM=="tty", ACTION=="remove", ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", RUN+="/bin/systemctl stop zigbee"
+
+# lora usb
+SUBSYSTEM=="usb", ACTION=="add", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6010", MODE="0664", GROUP="plugdev", RUN+="/bin/systemctl restart lora"
+SUBSYSTEM=="usb", ACTION=="remove", ENV{DEVTYPE}=="usb_interface", ENV{PRODUCT}=="403/6010/700", RUN+="/bin/systemctl stop lora"

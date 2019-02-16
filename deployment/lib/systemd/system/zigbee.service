@@ -1,0 +1,15 @@
+[Unit]
+Description=ZigBee data collection
+After=systemd-udevd.service
+Wants=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/test_zigbee /dev/zigbee
+ExecReload=/usr/local/bin/test_zigbee /dev/zigbee
+RestartSec=60
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target 
+
