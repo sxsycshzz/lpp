@@ -52,7 +52,7 @@ Maintainer: Sylvain Miermont
 #define MQTT_IP		"127.0.0.1"
 #define MQTT_PORT	"1883" 
 #define MQTT_TOPIC	"mo_datatransfer_topic"
-#define LORA_DATA "\'{\"device\":\"lorasensor\",\"devid\":\"%s\",\"readings\":[\{\"name\":\"Temperature\",\"value\":\"%.1f\"\},\{\"name\":\"Humidity\",\"value\":\"%.1f\"\}]}\'"
+#define LORA_DATA "\'{\"device\":\"lorasensor\",\"devid\":\"%s\",\"readings\":[\{\"name\":\"LoraTemperature\",\"value\":\"%.1f\"\},\{\"name\":\"LoraHumidity\",\"value\":\"%.1f\"\}]}\'"
 #define MQTT_SEND_CMD	"mosquitto_pub -h %s -p %s -t %s -m " LORA_DATA
 #define LORA_DATA_LEN	18
 
