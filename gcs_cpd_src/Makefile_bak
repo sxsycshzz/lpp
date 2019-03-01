@@ -1,0 +1,37 @@
+
+obj =   MQTTClient_publish.o MQTTClient_net_subscribe.o MQTTClient_bluetooth_subscribe.o MQTTClient_common_subscribe.o conf_network.o conf_bluetooth.o conf_common.o
+obj +=  MQTTClient.o Base64.o Clients.o Heap.o LinkedList.o Log.o MQTTPacket.o MQTTPacketOut.o MQTTPersistence.o MQTTPersistenceDefault.o MQTTProperties.o MQTTProtocolClient.o 
+obj +=  MQTTProtocolOut.o MQTTReasonCodes.o Messages.o OsWrapper.o SHA1.o SSLSocket.o Socket.o SocketBuffer.o StackTrace.o Thread.o Tree.o WebSocket.o utf-8.o cJSON.o parsekv.o cmd.o
+
+compilers = gcc
+parameters = -pthread -ldl -o
+
+CUR_DIR = $(shell pwd)
+OBJ_DIR = /usr/local/bin/
+
+ext_file_pub = MQTT_server_cloud_client_pub
+ext_file_net = MQTT_server_local_client_net_sub
+ext_file_blu = MQTT_server_local_client_bluetooth_sub
+ext_file_com = MQTT_server_local_client_common_sub
+
+source_file_base =  MQTTClient.c Base64.c Clients.c Heap.c LinkedList.c Log.c MQTTPacket.c MQTTPacketOut.c MQTTPersistence.c MQTTPersistenceDefault.c MQTTProperties.c MQTTProtocolClient.c
+source_file_base += MQTTProtocolOut.c MQTTReasonCodes.c Messages.c OsWrapper.c SHA1.c SSLSocket.c Socket.c SocketBuffer.c StackTrace.c Thread.c Tree.c WebSocket.c utf-8.c cJSON.c parsekv.c cmd.c 
+source_file_pub = MQTTClient_publish.c $(source_file_base)
+source_file_net = MQTTClient_net_subscribe.c conf_network.c $(source_file_base)
+source_file_blu = MQTTClient_bluetooth_subscribe.c conf_bluetooth.c $(source_file_base)
+source_file_com = MQTTClient_common_subscribe.c conf_common.c $(source_file_base)
+
+
+all: $(obj)
+	$(compilers) $(source_file_pub) $(parameters) $(ext_file_pub)
+	$(compilers) $(source_file_net) $(parameters) $(ext_file_net)
+	$(compilers) $(source_file_blu) $(parameters) $(ext_file_blu)
+	$(compilers) $(source_file_com) $(parameters) $(ext_file_com)
+
+.PHONY: cp
+cp:
+	cp $(CUR_DIR)/$(ext_file_pub) $(CUR_DIR)/$(ext_file_net) $(CUR_DIR)/$(ext_file_blu) $(CUR_DIR)/$(ext_file_com) $(OBJ_DIR)
+
+.PHONY: clean
+clean:
+	rm *.o $(ext_file_pub) $(ext_file_net) $(ext_file_blu) $(ext_file_com) -f

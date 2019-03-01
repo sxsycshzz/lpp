@@ -1,0 +1,10 @@
+payload_info=get_gateway_info
+name.first_half=1111111111112
+name.second_half=222222222223
+gateway_key=333333333334
+gateway_sn=4444444444445
+#gateway_net_way=static
+ga_man_plat_ip=172.16.94.50
+ga_man_plat_port=1883
+ga_man_plat_name=ccccccccv
+ga_man_plat_passwd=vvvvvvvvvvb
